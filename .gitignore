@@ -1,0 +1,12 @@
+# Build results
+Debug/
+Release/
+x64/
+x86/
+*.user
+*.suo
+*.db
+*.opendb
+.vs/
+ipch/
+*.aps
