@@ -52,6 +52,11 @@ END_MESSAGE_MAP()
 
 CMFCProjectDlg::CMFCProjectDlg(CWnd* pParent /*=nullptr*/)
 	: CDialogEx(IDD_MFC_PROJECT_DIALOG, pParent)
+	, m_nRadius(0)
+	, m_nThickness(0)
+	, m_strP1(_T(""))
+	, m_strP2(_T(""))
+	, m_strP3(_T(""))
 {
 	m_hIcon = AfxGetApp()->LoadIcon(IDR_MAINFRAME);
 }
@@ -59,6 +64,11 @@ CMFCProjectDlg::CMFCProjectDlg(CWnd* pParent /*=nullptr*/)
 void CMFCProjectDlg::DoDataExchange(CDataExchange* pDX)
 {
 	CDialogEx::DoDataExchange(pDX);
+	DDX_Text(pDX, IDC_EDIT_RADIUS, m_nRadius);
+	DDX_Text(pDX, IDC_EDIT_THICKNESS, m_nThickness);
+	DDX_Text(pDX, IDC_STATIC_P1, m_strP1);
+	DDX_Text(pDX, IDC_STATIC_P2, m_strP2);
+	DDX_Text(pDX, IDC_STATIC_P3, m_strP3);
 }
 
 BEGIN_MESSAGE_MAP(CMFCProjectDlg, CDialogEx)
@@ -66,6 +76,7 @@ BEGIN_MESSAGE_MAP(CMFCProjectDlg, CDialogEx)
 	ON_WM_PAINT()
 	ON_WM_QUERYDRAGICON()
 	ON_WM_LBUTTONDOWN()
+
 END_MESSAGE_MAP()
 
 
@@ -98,10 +109,17 @@ BOOL CMFCProjectDlg::OnInitDialog()
 	// 이 대화 상자의 아이콘을 설정합니다.  응용 프로그램의 주 창이 대화 상자가 아닐 경우에는
 	//  프레임워크가 이 작업을 자동으로 수행합니다.
 	SetIcon(m_hIcon, TRUE);			// 큰 아이콘을 설정합니다.
-	SetIcon(m_hIcon, FALSE);		// 작은 아이콘을 설정합니다.
+	SetIcon(m_hIcon, FALSE);		// 작은 아이콘을 설정합니다.\
 
-	// TODO: 여기에 추가 초기화 작업을 추가합니다.
 	m_nPointCount = 0;
+	m_cx = m_cy = m_radius = 0.0;
+	m_nRadius = 10;
+	m_nThickness = 1;
+	m_strP1 = _T("P1: (-, -)");
+	m_strP2 = _T("P2: (-, -)");
+	m_strP3 = _T("P3: (-, -)");
+	UpdateData(FALSE);  // 변수 → 화면 반영
+
 	return TRUE;  // 포커스를 컨트롤에 설정하지 않으면 TRUE를 반환합니다.
 }
 
@@ -121,6 +139,27 @@ void CMFCProjectDlg::OnSysCommand(UINT nID, LPARAM lParam)
 // 대화 상자에 최소화 단추를 추가할 경우 아이콘을 그리려면
 //  아래 코드가 필요합니다.  문서/뷰 모델을 사용하는 MFC 애플리케이션의 경우에는
 //  프레임워크에서 이 작업을 자동으로 수행합니다.
+void CMFCProjectDlg::DrawCircle(CDC* pDC, int cx, int cy, int radius)
+{
+	const int steps = 360;
+	double angleStep = 2.0 * 3.14159265 / steps;
+
+	int prevX = cx + (int)(radius * cos(0));
+	int prevY = cy + (int)(radius * sin(0));
+
+	for (int i = 1; i <= steps; i++)
+	{
+		double angle = i * angleStep;
+		int x = cx + (int)(radius * cos(angle));
+		int y = cy + (int)(radius * sin(angle));
+
+		pDC->MoveTo(prevX, prevY);
+		pDC->LineTo(x, y);
+
+		prevX = x;
+		prevY = y;
+	}
+}
 
 void CMFCProjectDlg::OnPaint()
 {
@@ -143,8 +182,41 @@ void CMFCProjectDlg::OnPaint()
 	}
 	else
 	{
-		CDialogEx::OnPaint();
+		CPaintDC dc(this);
+
+		// 클릭 지점 원 그리기 (3개까지)
+		for (int i = 0; i < m_nPointCount; i++)
+		{
+			DrawCircle(&dc, m_points[i].x, m_points[i].y, 10);
+		}
+
+		// 3점 찍혔을 때 외접원 그리기
+		if (m_nPointCount == 3)
+		{
+			if (CalcCircumCircle(m_points[0], m_points[1], m_points[2], m_cx, m_cy, m_radius))
+			{
+				DrawCircle(&dc, (int)m_cx, (int)m_cy, (int)m_radius);
+			}
+		}
 	}
+}
+bool CMFCProjectDlg::CalcCircumCircle(CPoint p1, CPoint p2, CPoint p3, double& cx, double& cy, double& r)
+{
+	double ax = p2.x - p1.x, ay = p2.y - p1.y;
+	double bx = p3.x - p1.x, by = p3.y - p1.y;
+
+	double D = 2.0 * (ax * by - ay * bx);
+	if (fabs(D) < 1e-10)
+		return false;  // 세 점이 일직선
+
+	double ux = (by * (ax * ax + ay * ay) - ay * (bx * bx + by * by)) / D;
+	double uy = (ax * (bx * bx + by * by) - bx * (ax * ax + ay * ay)) / D;
+
+	cx = p1.x + ux;
+	cy = p1.y + uy;
+	r = sqrt(ux * ux + uy * uy);
+
+	return true;
 }
 
 // 사용자가 최소화된 창을 끄는 동안에 커서가 표시되도록 시스템에서
@@ -157,7 +229,13 @@ HCURSOR CMFCProjectDlg::OnQueryDragIcon()
 
 void CMFCProjectDlg::OnLButtonDown(UINT nFlags, CPoint point)
 {
-	// TODO: 여기에 메시지 처리기 코드를 추가 및/또는 기본값을 호출합니다.
+	if (m_nPointCount < 3)
+	{
+		m_points[m_nPointCount] = point;
+		m_nPointCount++;
+		Invalidate();
+	}
 
 	CDialogEx::OnLButtonDown(nFlags, point);
 }
+

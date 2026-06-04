@@ -35,7 +35,15 @@ protected:
 private:
 	CPoint m_points[3];
 	int m_nPointCount;
+	double m_cx, m_cy, m_radius;  // 외접원 중심, 반지름
+	void DrawCircle(CDC* pDC, int cx, int cy, int radius);
+	bool CalcCircumCircle(CPoint p1, CPoint p2, CPoint p3, double& cx, double& cy, double& r);
 
 public:
 	afx_msg void OnLButtonDown(UINT nFlags, CPoint point);
+	int m_nRadius;
+	int m_nThickness;
+	CString m_strP1;
+	CString m_strP2;
+	CString m_strP3;
 };
