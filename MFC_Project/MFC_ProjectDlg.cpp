@@ -77,6 +77,11 @@ BEGIN_MESSAGE_MAP(CMFCProjectDlg, CDialogEx)
 	ON_WM_QUERYDRAGICON()
 	ON_WM_LBUTTONDOWN()
 
+	ON_BN_CLICKED(IDC_BTN_RESET, &CMFCProjectDlg::OnBnClickedBtnReset)
+	ON_WM_LBUTTONUP()
+	ON_WM_MOUSEMOVE()
+	ON_BN_CLICKED(IDC_BTN_RANDOM, &CMFCProjectDlg::OnBnClickedBtnRandom)
+	ON_MESSAGE(WM_USER + 1, &CMFCProjectDlg::OnRandomUpdate)
 END_MESSAGE_MAP()
 
 
@@ -86,9 +91,6 @@ BOOL CMFCProjectDlg::OnInitDialog()
 {
 	CDialogEx::OnInitDialog();
 
-	// 시스템 메뉴에 "정보..." 메뉴 항목을 추가합니다.
-
-	// IDM_ABOUTBOX는 시스템 명령 범위에 있어야 합니다.
 	ASSERT((IDM_ABOUTBOX & 0xFFF0) == IDM_ABOUTBOX);
 	ASSERT(IDM_ABOUTBOX < 0xF000);
 
@@ -106,8 +108,6 @@ BOOL CMFCProjectDlg::OnInitDialog()
 		}
 	}
 
-	// 이 대화 상자의 아이콘을 설정합니다.  응용 프로그램의 주 창이 대화 상자가 아닐 경우에는
-	//  프레임워크가 이 작업을 자동으로 수행합니다.
 	SetIcon(m_hIcon, TRUE);			// 큰 아이콘을 설정합니다.
 	SetIcon(m_hIcon, FALSE);		// 작은 아이콘을 설정합니다.\
 
@@ -118,7 +118,10 @@ BOOL CMFCProjectDlg::OnInitDialog()
 	m_strP1 = _T("P1: (-, -)");
 	m_strP2 = _T("P2: (-, -)");
 	m_strP3 = _T("P3: (-, -)");
+	m_nDragIndex = -1;
+	m_bDragging = false;
 	UpdateData(FALSE);  // 변수 → 화면 반영
+	m_bThreadRunning = false;
 
 	return TRUE;  // 포커스를 컨트롤에 설정하지 않으면 TRUE를 반환합니다.
 }
@@ -136,9 +139,6 @@ void CMFCProjectDlg::OnSysCommand(UINT nID, LPARAM lParam)
 	}
 }
 
-// 대화 상자에 최소화 단추를 추가할 경우 아이콘을 그리려면
-//  아래 코드가 필요합니다.  문서/뷰 모델을 사용하는 MFC 애플리케이션의 경우에는
-//  프레임워크에서 이 작업을 자동으로 수행합니다.
 void CMFCProjectDlg::DrawCircle(CDC* pDC, int cx, int cy, int radius)
 {
 	const int steps = 360;
@@ -187,7 +187,7 @@ void CMFCProjectDlg::OnPaint()
 		// 클릭 지점 원 그리기 (3개까지)
 		for (int i = 0; i < m_nPointCount; i++)
 		{
-			DrawCircle(&dc, m_points[i].x, m_points[i].y, 10);
+			DrawCircle(&dc, m_points[i].x, m_points[i].y, m_nRadius);
 		}
 
 		// 3점 찍혔을 때 외접원 그리기
@@ -195,7 +195,10 @@ void CMFCProjectDlg::OnPaint()
 		{
 			if (CalcCircumCircle(m_points[0], m_points[1], m_points[2], m_cx, m_cy, m_radius))
 			{
+				CPen pen(PS_SOLID, m_nThickness, RGB(0, 0, 0));
+				CPen* pOldPen = dc.SelectObject(&pen);
 				DrawCircle(&dc, (int)m_cx, (int)m_cy, (int)m_radius);
+				dc.SelectObject(pOldPen);
 			}
 		}
 	}
@@ -229,13 +232,138 @@ HCURSOR CMFCProjectDlg::OnQueryDragIcon()
 
 void CMFCProjectDlg::OnLButtonDown(UINT nFlags, CPoint point)
 {
+	UpdateData(TRUE);
+
+	// 히트테스트 - 3점 다 찍힌 상태에서 기존 점 클릭했는지 확인
+	if (m_nPointCount == 3)
+	{
+		for (int i = 0; i < 3; i++)
+		{
+			int dx = point.x - m_points[i].x;
+			int dy = point.y - m_points[i].y;
+			if (sqrt((double)(dx * dx + dy * dy)) <= m_nRadius)
+			{
+				m_bDragging = true;
+				m_nDragIndex = i;
+				SetCapture();
+				return;
+			}
+		}
+	}
+
+	// 새 점 찍기 (3개 미만일 때만)
 	if (m_nPointCount < 3)
 	{
 		m_points[m_nPointCount] = point;
 		m_nPointCount++;
+
+		CString str;
+		str.Format(_T("P%d: (%d, %d)"), m_nPointCount, point.x, point.y);
+		if (m_nPointCount == 1) m_strP1 = str;
+		else if (m_nPointCount == 2) m_strP2 = str;
+		else if (m_nPointCount == 3) m_strP3 = str;
+
+		UpdateData(FALSE);
 		Invalidate();
 	}
 
 	CDialogEx::OnLButtonDown(nFlags, point);
 }
 
+
+void CMFCProjectDlg::OnBnClickedBtnReset()
+{
+	m_nPointCount = 0;
+	m_cx = m_cy = m_radius = 0.0;
+	m_nRadius = 10;
+	m_nThickness = 1;
+	m_strP1 = _T("P1: (-, -)");
+	m_strP2 = _T("P2: (-, -)");
+	m_strP3 = _T("P3: (-, -)");
+	UpdateData(FALSE);
+	Invalidate();
+}
+
+void CMFCProjectDlg::OnLButtonUp(UINT nFlags, CPoint point)
+{
+	if (m_bDragging)
+	{
+		m_bDragging = false;
+		m_nDragIndex = -1;
+		ReleaseCapture();  // 마우스 캡처 해제
+	}
+
+	CDialogEx::OnLButtonUp(nFlags, point);
+}
+
+void CMFCProjectDlg::OnMouseMove(UINT nFlags, CPoint point)
+{
+	if (m_bDragging && m_nDragIndex >= 0)
+	{
+		m_points[m_nDragIndex] = point;
+
+		// 좌표 표시 업데이트
+		CString str;
+		str.Format(_T("P%d: (%d, %d)"), m_nDragIndex + 1, point.x, point.y);
+		if (m_nDragIndex == 0) m_strP1 = str;
+		else if (m_nDragIndex == 1) m_strP2 = str;
+		else if (m_nDragIndex == 2) m_strP3 = str;
+
+		UpdateData(FALSE);
+		Invalidate();
+	}
+
+	CDialogEx::OnMouseMove(nFlags, point);
+}
+
+
+void CMFCProjectDlg::OnBnClickedBtnRandom()
+{
+	if (m_nPointCount != 3 || m_bThreadRunning)
+		return;
+
+	AfxBeginThread(RandomMoveThread, this);
+}
+
+LRESULT CMFCProjectDlg::OnRandomUpdate(WPARAM wParam, LPARAM lParam)
+{
+	UpdateData(FALSE);
+	Invalidate();
+	return 0;
+}
+
+UINT CMFCProjectDlg::RandomMoveThread(LPVOID pParam)
+{
+	CMFCProjectDlg* pDlg = (CMFCProjectDlg*)pParam;
+	pDlg->m_bThreadRunning = true;
+
+	CRect rect;
+	pDlg->GetClientRect(&rect);
+
+	srand((unsigned int)time(NULL));
+
+	for (int i = 0; i < 10; i++)
+	{
+		for (int j = 0; j < 3; j++)
+		{
+			pDlg->m_points[j].x = rand() % rect.Width();
+			pDlg->m_points[j].y = rand() % rect.Height();
+		}
+
+		// 좌표 표시 업데이트
+		for (int j = 0; j < 3; j++)
+		{
+			CString str;
+			str.Format(_T("P%d: (%d, %d)"), j + 1, pDlg->m_points[j].x, pDlg->m_points[j].y);
+			if (j == 0) pDlg->m_strP1 = str;
+			else if (j == 1) pDlg->m_strP2 = str;
+			else if (j == 2) pDlg->m_strP3 = str;
+		}
+
+		pDlg->PostMessage(WM_USER + 1, 0, 0);
+		Sleep(500);
+	}
+
+	pDlg->m_bThreadRunning = false;
+	return 0;
+}

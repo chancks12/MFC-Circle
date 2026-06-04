@@ -10,7 +10,6 @@
 #define IDC_EDIT_RADIUS                 1000
 #define IDC_EDIT_THICKNESS              1001
 #define IDC_BTN_RESET                   1002
-#define IDC_BUTTON2                     1003
 #define IDC_BTN_RANDOM                  1003
 #define IDC_STATIC_P1                   1004
 #define IDC_STATIC_P2                   1005

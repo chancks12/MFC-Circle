@@ -38,6 +38,10 @@ private:
 	double m_cx, m_cy, m_radius;  // 외접원 중심, 반지름
 	void DrawCircle(CDC* pDC, int cx, int cy, int radius);
 	bool CalcCircumCircle(CPoint p1, CPoint p2, CPoint p3, double& cx, double& cy, double& r);
+	int m_nDragIndex;   // 드래그 중인 점 인덱스 (-1이면 드래그 안 하는 상태)
+	bool m_bDragging;   // 드래그 중인지 여부
+	static UINT RandomMoveThread(LPVOID pParam);
+	bool m_bThreadRunning;
 
 public:
 	afx_msg void OnLButtonDown(UINT nFlags, CPoint point);
@@ -46,4 +50,9 @@ public:
 	CString m_strP1;
 	CString m_strP2;
 	CString m_strP3;
+	afx_msg void OnBnClickedBtnReset();
+	afx_msg void OnLButtonUp(UINT nFlags, CPoint point);
+	afx_msg void OnMouseMove(UINT nFlags, CPoint point);
+	afx_msg void OnBnClickedBtnRandom();
+	afx_msg LRESULT OnRandomUpdate(WPARAM wParam, LPARAM lParam);
 };
