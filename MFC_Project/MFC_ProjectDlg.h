@@ -31,4 +31,11 @@ protected:
 	afx_msg void OnPaint();
 	afx_msg HCURSOR OnQueryDragIcon();
 	DECLARE_MESSAGE_MAP()
+
+private:
+	CPoint m_points[3];
+	int m_nPointCount;
+
+public:
+	afx_msg void OnLButtonDown(UINT nFlags, CPoint point);
 };
